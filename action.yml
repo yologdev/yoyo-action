@@ -28,18 +28,23 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.gh_token }}
+        OWNER: ${{ github.repository_owner }}
       run: |
+        set -euo pipefail
+
         VISIBILITY=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility' 2>/dev/null || echo "private")
 
         if [ "$VISIBILITY" = "public" ]; then
           echo "Running yoyo (open source — free)"
         else
-          # Check sponsors.json for private repo access
           SPONSORS_URL="https://raw.githubusercontent.com/yologdev/yoyo-action/main/sponsors.json"
-          SPONSORS=$(curl -fsSL "$SPONSORS_URL" 2>/dev/null || echo "[]")
-          OWNER="${GITHUB_REPOSITORY_OWNER}"
+          if ! SPONSORS=$(curl -fsSL "$SPONSORS_URL"); then
+            echo "::error::Failed to fetch sponsor list. Retrying..."
+            sleep 2
+            SPONSORS=$(curl -fsSL "$SPONSORS_URL")
+          fi
 
-          if echo "$SPONSORS" | python3 -c "import sys,json; owners=json.load(sys.stdin); sys.exit(0 if '$OWNER' in owners else 1)" 2>/dev/null; then
+          if echo "$SPONSORS" | python3 -c "import sys,json; owners=json.load(sys.stdin); sys.exit(0 if sys.argv[1] in owners else 1)" "$OWNER"; then
             echo "Running yoyo (sponsor: $OWNER)"
           else
             echo "::warning::yoyo is free for open source repos. For private repos, please sponsor yologdev."
@@ -48,22 +53,61 @@ runs:
           fi
         fi
 
-    - name: Run yoyo agent
+    - name: Download harness scripts
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}
+      run: |
+        set -euo pipefail
+
+        HARNESS_DIR="/tmp/yoyo-harness"
+        rm -rf "$HARNESS_DIR"
+        mkdir -p "$HARNESS_DIR"
+
+        echo "Downloading yoyo harness..."
+        curl -fsSL "https://github.com/yologdev/yoyo-harness/archive/refs/heads/main.tar.gz" \
+          -o /tmp/harness.tar.gz
+        tar xzf /tmp/harness.tar.gz -C "$HARNESS_DIR" --strip-components=1
+        rm -f /tmp/harness.tar.gz
+
+        chmod +x "$HARNESS_DIR/scripts/"*.sh
+        echo "HARNESS_DIR=$HARNESS_DIR" >> "$GITHUB_ENV"
+
+    - name: Install yoyo binary
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        REPO="yologdev/yoyo-evolve"
+        LATEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+        echo "Installing yoyo $LATEST..."
+
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) TARGET="x86_64-unknown-linux-gnu" ;;
+          aarch64|arm64) TARGET="aarch64-unknown-linux-gnu" ;;
+          *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+
+        curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/yoyo-$LATEST-$TARGET.tar.gz" \
+          -o /tmp/yoyo.tar.gz
+        tar xzf /tmp/yoyo.tar.gz -C /tmp
+        cp /tmp/yoyo "$HOME/.local/bin/yoyo" 2>/dev/null || {
+          mkdir -p "$HOME/.local/bin"
+          cp /tmp/yoyo "$HOME/.local/bin/yoyo" || cp /tmp/yoyo-*/yoyo "$HOME/.local/bin/yoyo"
+        }
+        chmod +x "$HOME/.local/bin/yoyo"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        rm -rf /tmp/yoyo*
+
+    - name: Run agent
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         GH_TOKEN: ${{ inputs.gh_token }}
         REPO: ${{ github.repository }}
         MODEL: ${{ inputs.model }}
+        AGENT_ARGS: ${{ inputs.args }}
       run: |
-        docker pull ghcr.io/yologdev/yoyo-harness:latest
-
-        docker run --rm \
-          -e ANTHROPIC_API_KEY \
-          -e GH_TOKEN \
-          -e REPO \
-          -e MODEL \
-          -v "$GITHUB_WORKSPACE:/workspace" \
-          -w /workspace \
-          ghcr.io/yologdev/yoyo-harness:latest \
-          ${{ inputs.agent }} ${{ inputs.args }}
+        set -euo pipefail
+        "$HARNESS_DIR/scripts/${{ inputs.agent }}.sh" $AGENT_ARGS
