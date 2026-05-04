@@ -99,7 +99,7 @@ runs:
         }
         chmod +x "$HOME/.local/bin/yoyo"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-        rm -rf /tmp/yoyo*
+        rm -rf /tmp/yoyo.tar.gz /tmp/yoyo-evolve*
 
     - name: Run agent
       shell: bash
