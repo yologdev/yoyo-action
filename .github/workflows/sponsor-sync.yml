@@ -21,20 +21,42 @@ jobs:
           GH_TOKEN: ${{ secrets.SPONSOR_PAT }}
         run: |
           # Query GitHub Sponsors API for active sponsors
-          gh api graphql -f query='
-            query {
-              organization(login: "yologdev") {
-                sponsorshipsAsMaintainer(first: 100, activeOnly: true) {
-                  nodes {
-                    sponsorEntity {
-                      ... on User { login }
-                      ... on Organization { login }
-                    }
+          # Try user first, fall back to organization
+          QUERY_USER='query {
+            user(login: "yologdev") {
+              sponsorshipsAsMaintainer(first: 100, activeOnly: true) {
+                nodes {
+                  sponsorEntity {
+                    ... on User { login }
+                    ... on Organization { login }
                   }
                 }
               }
             }
-          ' --jq '[.data.organization.sponsorshipsAsMaintainer.nodes[].sponsorEntity.login]' > sponsors.json
+          }'
+          QUERY_ORG='query {
+            organization(login: "yologdev") {
+              sponsorshipsAsMaintainer(first: 100, activeOnly: true) {
+                nodes {
+                  sponsorEntity {
+                    ... on User { login }
+                    ... on Organization { login }
+                  }
+                }
+              }
+            }
+          }'
+
+          if gh api graphql -f query="$QUERY_USER" \
+            --jq '[.data.user.sponsorshipsAsMaintainer.nodes[].sponsorEntity.login]' > sponsors.json 2>/dev/null; then
+            echo "Fetched sponsors (user account)"
+          elif gh api graphql -f query="$QUERY_ORG" \
+            --jq '[.data.organization.sponsorshipsAsMaintainer.nodes[].sponsorEntity.login]' > sponsors.json 2>/dev/null; then
+            echo "Fetched sponsors (organization)"
+          else
+            echo "WARNING: Could not fetch sponsors. Keeping existing list."
+            exit 0
+          fi
 
           echo "Sponsors: $(cat sponsors.json)"
 
