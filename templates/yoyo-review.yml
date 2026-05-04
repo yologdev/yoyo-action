@@ -1,0 +1,54 @@
+name: yoyo Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+concurrency:
+  group: yoyo-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Only review yoyo's own PRs
+    if: startsWith(github.event.pull_request.head.ref, 'yoyo/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile 2>/dev/null || pnpm install || true
+
+      - name: Configure git
+        run: |
+          git config user.name "yoyo[bot]"
+          git config user.email "yoyo[bot]@users.noreply.github.com"
+
+      - name: Run yoyo Review
+        uses: yologdev/yoyo-action@v1
+        with:
+          agent: review
+          args: ${{ github.event.pull_request.number }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}

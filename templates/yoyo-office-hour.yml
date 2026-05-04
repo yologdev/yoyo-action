@@ -1,0 +1,32 @@
+name: yoyo Office Hour
+
+on:
+  schedule:
+    - cron: '0 7 * * *'  # Daily at 7am UTC (1h after PM)
+  issues:
+    types: [opened]
+  workflow_dispatch: {}
+
+concurrency:
+  group: yoyo-office-hour
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  office-hour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run yoyo Office Hour
+        uses: yologdev/yoyo-action@v1
+        with:
+          agent: office-hour
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}

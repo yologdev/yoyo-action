@@ -1,0 +1,72 @@
+name: yoyo Build
+
+on:
+  issues:
+    types: [labeled]
+  schedule:
+    - cron: '0 */4 * * *'  # Fallback: every 4 hours
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: 'Issue number to implement'
+        required: false
+
+# No concurrency group — parallel builds by design
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    # Only run on "ready" label events, schedule, or manual dispatch
+    if: >
+      github.event_name != 'issues' ||
+      github.event.label.name == 'ready'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile 2>/dev/null || pnpm install || true
+
+      - name: Configure git
+        run: |
+          git config user.name "yoyo[bot]"
+          git config user.email "yoyo[bot]@users.noreply.github.com"
+
+      - name: Determine issue number
+        id: issue
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.issue }}" ]; then
+            echo "number=${{ github.event.inputs.issue }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run yoyo Build
+        uses: yologdev/yoyo-action@v1
+        with:
+          agent: build
+          args: ${{ steps.issue.outputs.number }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}

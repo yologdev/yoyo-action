@@ -1,0 +1,48 @@
+name: Sync Sponsors
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Hourly
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch sponsors
+        env:
+          GH_TOKEN: ${{ secrets.SPONSOR_PAT }}
+        run: |
+          # Query GitHub Sponsors API for active sponsors
+          gh api graphql -f query='
+            query {
+              organization(login: "yologdev") {
+                sponsorshipsAsMaintainer(first: 100, activeOnly: true) {
+                  nodes {
+                    sponsorEntity {
+                      ... on User { login }
+                      ... on Organization { login }
+                    }
+                  }
+                }
+              }
+            }
+          ' --jq '[.data.organization.sponsorshipsAsMaintainer.nodes[].sponsorEntity.login]' > sponsors.json
+
+          echo "Sponsors: $(cat sponsors.json)"
+
+      - name: Commit if changed
+        run: |
+          git diff --quiet sponsors.json && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sponsors.json
+          git commit -m "sync sponsors [$(date -u +%Y-%m-%d %H:%M)]"
+          git push

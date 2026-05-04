@@ -1,0 +1,35 @@
+name: yoyo Research
+
+on:
+  schedule:
+    - cron: '0 9 * * 0'  # Every Sunday at 9am UTC
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: 'What should yoyo research?'
+        required: false
+
+concurrency:
+  group: yoyo-research
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run yoyo Research
+        uses: yologdev/yoyo-action@v1
+        with:
+          agent: research
+          args: ${{ github.event.inputs.focus || '' }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}

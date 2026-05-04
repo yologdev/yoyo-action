@@ -1,0 +1,69 @@
+name: 'yoyo Agent'
+description: 'Run yoyo coding agents — free for open source, sponsors for private repos'
+author: 'yologdev'
+
+inputs:
+  agent:
+    description: 'Which agent to run: pm, build, review, office-hour, research'
+    required: true
+  args:
+    description: 'Arguments to pass to the agent (e.g., issue number for build, PR number for review)'
+    required: false
+    default: ''
+  anthropic_api_key:
+    description: 'Anthropic API key'
+    required: true
+  gh_token:
+    description: 'GitHub token with repo access'
+    required: true
+  model:
+    description: 'Claude model to use'
+    required: false
+    default: 'claude-opus-4-6'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Sponsor check (private repos only)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}
+      run: |
+        VISIBILITY=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility' 2>/dev/null || echo "private")
+
+        if [ "$VISIBILITY" = "public" ]; then
+          echo "Running yoyo (open source — free)"
+        else
+          # Check sponsors.json for private repo access
+          SPONSORS_URL="https://raw.githubusercontent.com/yologdev/yoyo-action/main/sponsors.json"
+          SPONSORS=$(curl -fsSL "$SPONSORS_URL" 2>/dev/null || echo "[]")
+          OWNER="${GITHUB_REPOSITORY_OWNER}"
+
+          if echo "$SPONSORS" | python3 -c "import sys,json; owners=json.load(sys.stdin); sys.exit(0 if '$OWNER' in owners else 1)" 2>/dev/null; then
+            echo "Running yoyo (sponsor: $OWNER)"
+          else
+            echo "::warning::yoyo is free for open source repos. For private repos, please sponsor yologdev."
+            echo "::warning::https://github.com/sponsors/yologdev"
+            exit 1
+          fi
+        fi
+
+    - name: Run yoyo agent
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        GH_TOKEN: ${{ inputs.gh_token }}
+        REPO: ${{ github.repository }}
+        MODEL: ${{ inputs.model }}
+      run: |
+        docker pull ghcr.io/yologdev/yoyo-harness:latest
+
+        docker run --rm \
+          -e ANTHROPIC_API_KEY \
+          -e GH_TOKEN \
+          -e REPO \
+          -e MODEL \
+          -v "$GITHUB_WORKSPACE:/workspace" \
+          -w /workspace \
+          ghcr.io/yologdev/yoyo-harness:latest \
+          ${{ inputs.agent }} ${{ inputs.args }}
