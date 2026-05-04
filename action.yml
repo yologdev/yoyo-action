@@ -4,7 +4,7 @@ author: 'yologdev'
 
 inputs:
   agent:
-    description: 'Which agent to run: pm, build, review, office-hour, research'
+    description: 'Agent name (matches agents/<name>/ directory in harness)'
     required: true
   args:
     description: 'Arguments to pass to the agent (e.g., issue number for build, PR number for review)'
@@ -71,6 +71,7 @@ runs:
         rm -f /tmp/harness.tar.gz
 
         chmod +x "$HARNESS_DIR/scripts/"*.sh
+        find "$HARNESS_DIR/agents" -name "*.sh" -exec chmod +x {} \;
         echo "HARNESS_DIR=$HARNESS_DIR" >> "$GITHUB_ENV"
 
     - name: Install yoyo binary
@@ -110,4 +111,4 @@ runs:
         AGENT_ARGS: ${{ inputs.args }}
       run: |
         set -euo pipefail
-        "$HARNESS_DIR/scripts/${{ inputs.agent }}.sh" $AGENT_ARGS
+        "$HARNESS_DIR/scripts/run-agent.sh" "${{ inputs.agent }}" $AGENT_ARGS
