@@ -108,7 +108,8 @@ runs:
         GH_TOKEN: ${{ inputs.gh_token }}
         REPO: ${{ github.repository }}
         MODEL: ${{ inputs.model }}
+        AGENT_NAME: ${{ inputs.agent }}
         AGENT_ARGS: ${{ inputs.args }}
       run: |
         set -euo pipefail
-        "$HARNESS_DIR/scripts/run-agent.sh" "${{ inputs.agent }}" $AGENT_ARGS
+        "$HARNESS_DIR/scripts/run-agent.sh" "$AGENT_NAME" $AGENT_ARGS
